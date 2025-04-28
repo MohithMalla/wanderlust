@@ -1,6 +1,6 @@
-if(process.env.NODE_ENV != "production"){
-require("dotenv").config();}
-// console.log(process.env.SECRET);
+if (process.env.NODE_ENV != "production") {
+  require("dotenv").config();
+}
 
 // ---------- Importing Modules ----------
 const express = require("express");
@@ -14,7 +14,7 @@ const flash = require("connect-flash");
 const passport = require("passport");
 const LocalStrategy = require("passport-local");
 const multer = require("multer");
-const MongoStore=require("connect-mongo");
+const MongoStore = require("connect-mongo");
 
 // ---------- Importing Utilities and Models ----------
 const WrapAsync = require("./utils/WrapAsync.js");
@@ -25,33 +25,30 @@ const Review = require("./models/review.js");
 const Listing = require("./models/listing.js");
 const User = require("./models/user.js");
 const { storage } = require("./cloudConfig.js");
-const upload=multer({storage});
-const dbUrl=process.env.ATLAS_DB_URL;
 
+// ---------- Configurations ----------
+const upload = multer({ storage });
+const dbUrl = process.env.ATLAS_DB_URL;
 
-
-const store=MongoStore.create({
-  mongoUrl:dbUrl,
-  crypto:{
+// ---------- MongoDB Session Store ----------
+const store = MongoStore.create({
+  mongoUrl: dbUrl,
+  crypto: {
     secret: process.env.SECRET,
   },
-  touchAfter:24*60*60,
+  touchAfter: 24 * 60 * 60,
 });
 
-store.on("error",()=>{
-  console.log("ERROR IN THE MONGO SESSION STORE",err);
-})
+store.on("error", () => {
+  console.log("ERROR IN THE MONGO SESSION STORE");
+});
 
 // ---------- Database Connection ----------
-// const MONGO_URL = "mongodb://127.0.0.1:27017/wanderlust";
-
-main()
-  .then(() => console.log("Connected to DB"))
-  .catch((err) => console.error("Failed to connect to DB:", err));
-
 async function main() {
   await mongoose.connect(dbUrl);
+  console.log("Connected to DB");
 }
+main().catch((err) => console.error("Failed to connect to DB:", err));
 
 // ---------- View Engine Setup ----------
 app.engine("ejs", ejsMate);
@@ -63,16 +60,10 @@ app.use(express.urlencoded({ extended: true }));
 app.use(methodOverride("_method"));
 app.use(express.static(path.join(__dirname, "public")));
 
-// Request Logger Middleware
-// app.use((req, res, next) => {
-//   console.log(`Request Method: ${req.method}, Request URL: ${req.url}`);
-//   next();
-// });
-
 // Session and Flash Middleware
 const sessionOptions = {
   store,
-  secret:  process.env.SECRET,
+  secret: process.env.SECRET,
   resave: false,
   saveUninitialized: true,
   cookie: {
@@ -81,10 +72,6 @@ const sessionOptions = {
     httpOnly: true,
   },
 };
-
-
-
-
 app.use(session(sessionOptions));
 app.use(flash());
 
@@ -126,22 +113,7 @@ const validateReview = (req, res, next) => {
 
 // ========================== ROUTES ==========================
 
-// ---------- Basic Routes ----------
-// app.get("/", (req, res) => {
-//   res.send("Hi, I am the root route");
-// });
-
-// app.get("/demouser", async (req, res) => {
-//   let fakeUser = new User({
-//     email: "student@gmail.com",
-//     username: "delta-student",
-//   });
-//   let registeredUser = await User.register(fakeUser, "helloworld");
-//   res.send(registeredUser);
-// });
-
 // ---------- Listing Routes ----------
-
 // Show All Listings
 app.get("/listings", WrapAsync(async (req, res) => {
   const allListings = await Listing.find({});
@@ -153,21 +125,16 @@ app.get("/listings/new", isLoggedIn, WrapAsync(async (req, res) => {
   res.render("listings/new.ejs", { listing: {} });
 }));
 
+// Create New Listing
 app.post("/listings", isLoggedIn, upload.single('listing[image]'), WrapAsync(async (req, res) => {
   const { path: url, filename } = req.file;
   const listing = new Listing(req.body.listing);
   listing.owner = req.user._id;
   listing.image = { url, filename };
-  
   await listing.save();
-
   req.flash("success", "New Listing Created");
   res.redirect("/listings");
 }));
-
-
-
-
 
 // Show Single Listing
 app.get("/listings/:id", WrapAsync(async (req, res) => {
@@ -190,22 +157,22 @@ app.get("/listings/:id/edit", isLoggedIn, WrapAsync(async (req, res) => {
     req.flash("error", "Listing you requested does not exist");
     return res.redirect("/listings");
   }
-  let originalImage=listing.image.url;
-  console.log(originalImage);
-  originalImage=originalImage.replace("/upload","/upload/h_200,w_350");
-  res.render("listings/edit.ejs", { listing,originalImage });
+  let originalImage = listing.image.url;
+  originalImage = originalImage.replace("/upload", "/upload/h_200,w_350");
+  res.render("listings/edit.ejs", { listing, originalImage });
 }));
 
 // Update Listing
-app.put("/listings/:id", isLoggedIn,upload.single('listing[image]'), validateListing, WrapAsync(async (req, res) => {
+app.put("/listings/:id", isLoggedIn, upload.single('listing[image]'), validateListing, WrapAsync(async (req, res) => {
   let { id } = req.params;
-  let listing=await Listing.findByIdAndUpdate(id, { ...req.body.listing });
-  if(typeof req.file !== undefined){
-  let url = req.file.path;
-  let filename = req.file.filename;
-  listing.image={url,filename};
-  await listing.save();
+  let listing = await Listing.findByIdAndUpdate(id, { ...req.body.listing });
+  
+  if (req.file) {
+    let { path: url, filename } = req.file;
+    listing.image = { url, filename };
+    await listing.save();
   }
+
   req.flash("success", "Listing Updated Successfully");
   res.redirect(`/listings/${id}`);
 }));
@@ -219,9 +186,8 @@ app.delete("/listings/:id", isLoggedIn, WrapAsync(async (req, res) => {
 }));
 
 // ---------- Review Routes ----------
-
 // Create New Review
-app.post("/listings/:id/reviews",isLoggedIn,  WrapAsync(async (req, res) => {
+app.post("/listings/:id/reviews", isLoggedIn, WrapAsync(async (req, res) => {
   let listing = await Listing.findById(req.params.id);
   let newReview = new Review(req.body.review);
   newReview.author = req.user._id;
@@ -242,7 +208,6 @@ app.delete("/listings/:id/reviews/:reviewId", WrapAsync(async (req, res) => {
 }));
 
 // ---------- User Authentication Routes ----------
-
 // Signup Form
 app.get("/signup", (req, res) => {
   res.render("users/signup.ejs");
